@@ -3,3 +3,6 @@ dist/
 coverage/
 .env
 *.log
+# Git worktrees of Claude Code background agents
+.claude/worktrees/
+*.tgz
