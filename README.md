@@ -78,13 +78,22 @@ Tool-specific settings belong to each tool, with its own prefix.
 
 ## Install
 
+Each tagged version is attached to a [GitHub Release](https://github.com/meirakrish/llm-kit/releases) as a ready-built package:
+
 ```bash
-pnpm add @meirakrish/llm-kit @langchain/core zod
+pnpm add https://github.com/meirakrish/llm-kit/releases/download/v0.1.0/meirakrish-llm-kit-0.1.0.tgz
+pnpm add @langchain/core zod
 # only for hosted providers:
 pnpm add @langchain/anthropic   # and/or @langchain/openai
 ```
 
 `@langchain/core` and `zod` are peer dependencies, so the tool and llm-kit share one copy (messages and schemas cross the boundary).
+
+## Releasing
+
+1. Bump `version` in `package.json` and merge.
+2. Tag the merge commit: `git tag v0.2.0 && git push --tags`.
+3. The Release workflow checks the tag matches `package.json`, runs the tests, and attaches the package to a GitHub Release.
 
 ## Development
 
