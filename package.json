@@ -1,0 +1,76 @@
+{
+  "name": "@meirakrish/llm-kit",
+  "version": "0.1.0",
+  "description": "Hardened LLM layer shared by k8s-devops-agent and iac-pr-reviewer: providers, structured output, usage metering, Ollama safeguards",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meirakrish/llm-kit.git"
+  },
+  "homepage": "https://github.com/meirakrish/llm-kit#readme",
+  "bugs": {
+    "url": "https://github.com/meirakrish/llm-kit/issues"
+  },
+  "keywords": [
+    "llm",
+    "langchain",
+    "ollama",
+    "anthropic",
+    "openai",
+    "devops"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "pnpm run typecheck && pnpm run test"
+  },
+  "dependencies": {
+    "@langchain/ollama": "^1.3.0"
+  },
+  "peerDependencies": {
+    "@langchain/anthropic": "^1.5.0",
+    "@langchain/core": "^1.2.0",
+    "@langchain/openai": "^1.6.0",
+    "zod": "^4.6.0"
+  },
+  "peerDependenciesMeta": {
+    "@langchain/anthropic": {
+      "optional": true
+    },
+    "@langchain/openai": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@langchain/anthropic": "^1.5.12",
+    "@langchain/core": "^1.2.17",
+    "@langchain/openai": "^1.6.2",
+    "@types/node": "^24.19.2",
+    "prettier": "^3.9.10",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3",
+    "zod": "^4.6.6"
+  },
+  "packageManager": "pnpm@10.28.0"
+}
