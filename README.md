@@ -126,7 +126,7 @@ pnpm add @langchain/anthropic   # and/or @langchain/openai
 2. Tag the merge commit: `git tag v0.2.0 && git push --tags`.
 3. The Release workflow checks the tag matches `package.json`, runs the tests, publishes the package to npm, and attaches it to a GitHub Release.
 
-npm accepts the publish through trusted publishing: the package's settings on npmjs.com trust this repo's `release.yml`, so no npm token is stored anywhere.
+The workflow publishes with the `NPM_TOKEN` repo secret, an npm granular access token for this package. Trusted publishing (OIDC, no stored token) is set up on npmjs.com but blocked by [npm/cli#9969](https://github.com/npm/cli/issues/9969); once that's fixed, drop the token from `release.yml`.
 
 ## Development
 
