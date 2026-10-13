@@ -1,14 +1,16 @@
 name: Release
 
-# Push a tag like v0.1.0 to build the package and attach it to a GitHub Release.
-# Projects install the release tarball, which ships the compiled dist/, so they
-# need no build step (and no pnpm allowBuilds entry) and no npm registry.
+# Push a tag like v0.1.0 to publish the package to npm and attach the tarball to
+# a GitHub Release. npm authenticates this workflow through trusted publishing
+# (GitHub OIDC), so there is no npm token in the repo, and each version gets a
+# provenance attestation.
 on:
   push:
     tags: ["v*"]
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
@@ -16,16 +18,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
+      # Node 24 because trusted publishing needs npm 11.5.1+, which Node 22 doesn't bundle.
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
+          registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - name: Check the tag matches package.json
         run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm pack
+      - name: Publish to npm
+        run: npm publish meirakrish-llm-kit-*.tgz --access public
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}

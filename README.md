@@ -53,7 +53,7 @@ It also defines the conventions both tools share: one severity scale (`low` < `m
 - **A small interface, not a framework.** Tools depend on `LlmClient` (three methods), not on LangChain models. Tests drive the tools with a scripted fake, and providers can change without touching tool code.
 - **Data policy belongs to the tool.** By default a present API key selects its hosted provider. k8s-devops-agent overrides that, so cluster data stays on the machine unless `LLM_PROVIDER` names a hosted provider. iac-pr-reviewer keeps the default, because a CI job with an API key is its expected setup.
 - **Shared conventions, not just shared code.** The severity scale, the `LLM_*` settings and the LLM block in JSON reports are defined here, so both tools configure and report the same way.
-- **Released as tarballs, not to npm.** Tagging a version builds the package in CI and attaches it to a GitHub Release. Projects install that tarball: no build step at install time, and the lockfile pins its sha512.
+- **Published from CI, ready-built.** Tagging a version builds the package in CI, publishes it to npm with a provenance attestation, and attaches the same tarball to a GitHub Release. Projects get the compiled `dist/`, so there is no build step at install time.
 
 ## Usage
 
@@ -111,10 +111,8 @@ Tool-specific settings belong to each tool, with its own prefix.
 
 ## Install
 
-Each tagged version is attached to a [GitHub Release](https://github.com/meirakrish/llm-kit/releases) as a ready-built package:
-
 ```bash
-pnpm add https://github.com/meirakrish/llm-kit/releases/download/v0.1.0/meirakrish-llm-kit-0.1.0.tgz
+pnpm add @meirakrish/llm-kit
 pnpm add @langchain/core zod
 # only for hosted providers:
 pnpm add @langchain/anthropic   # and/or @langchain/openai
@@ -126,7 +124,9 @@ pnpm add @langchain/anthropic   # and/or @langchain/openai
 
 1. Bump `version` in `package.json` and merge.
 2. Tag the merge commit: `git tag v0.2.0 && git push --tags`.
-3. The Release workflow checks the tag matches `package.json`, runs the tests, and attaches the package to a GitHub Release.
+3. The Release workflow checks the tag matches `package.json`, runs the tests, publishes the package to npm, and attaches it to a GitHub Release.
+
+npm accepts the publish through trusted publishing: the package's settings on npmjs.com trust this repo's `release.yml`, so no npm token is stored anywhere.
 
 ## Development
 
