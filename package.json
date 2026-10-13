@@ -1,6 +1,6 @@
 {
   "name": "@meirakrish/llm-kit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Hardened LLM layer shared by k8s-devops-agent and iac-pr-reviewer: providers, structured output, usage metering, Ollama safeguards",
   "license": "MIT",
   "type": "module",
