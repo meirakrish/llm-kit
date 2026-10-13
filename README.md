@@ -7,6 +7,22 @@ The LLM layer shared by two DevOps tools:
 
 Both tools follow the same pattern: deterministic rules first, an LLM on top to reason about what the rules found, and a rule-based fallback when the LLM fails. This package is the part they have in common: talking to a model reliably, with local models treated as a first-class target rather than an afterthought.
 
+```mermaid
+flowchart TB
+    agent["k8s-devops-agent<br/>scan → triage → investigate"]
+    reviewer["iac-pr-reviewer<br/>rules → LLM review → merge"]
+    subgraph kit["llm-kit"]
+        client["LlmClient<br/>chatWithTools · structured · takeUsage"]
+        guards["timeouts · retry policy · zod validation · usage meter"]
+        client --> guards
+    end
+    agent --> client
+    reviewer --> client
+    guards --> ollama["Ollama (local)<br/>truncate: false · bounded JSON · thinking off"]
+    guards --> anthropic["Anthropic"]
+    guards --> openai["OpenAI"]
+```
+
 ## What it handles
 
 | Problem                                                            | What llm-kit does                                                                                                                                    |
@@ -21,6 +37,23 @@ Both tools follow the same pattern: deterministic rules first, an LLM on top to 
 | Testing code that calls an LLM                                     | A small `LlmClient` interface and a scripted fake in `@meirakrish/llm-kit/testing`                                                                   |
 
 It also defines the conventions both tools share: one severity scale (`low` < `medium` < `high` < `critical`), `--fail-on` thresholds, and the LLM metadata block in JSON reports.
+
+## Design decisions
+
+- **Rules decide, the LLM explains.** In both tools the verdict comes from deterministic rules: the agent's severity and exit code come only from rules, and the reviewer's LLM can raise the risk but never lower it. llm-kit supports that split by making every call end in one of two ways, schema-valid data or an error, so the caller can always fall back to its rule-based result.
+- **Fail loudly instead of degrading silently.** By default Ollama drops the start of an over-long prompt and lets a small model generate until it runs out of tokens. Both produce confident answers from partial input. llm-kit turns them into errors instead: `truncate: false` with an actionable `ContextOverflowError`, an output token cap, and length limits enforced by constrained decoding.
+- **Retry only what a retry can fix.**
+
+  | Failure                                                | Retried?                                      |
+  | ------------------------------------------------------ | --------------------------------------------- |
+  | Unusable structured answer (bad JSON, schema mismatch) | once, every provider                          |
+  | Transient local GPU error                              | once, Ollama (hosted SDKs retry on their own) |
+  | Context overflow, timeout, server unreachable          | never: it would fail the same way             |
+
+- **A small interface, not a framework.** Tools depend on `LlmClient` (three methods), not on LangChain models. Tests drive the tools with a scripted fake, and providers can change without touching tool code.
+- **Data policy belongs to the tool.** By default a present API key selects its hosted provider. k8s-devops-agent overrides that, so cluster data stays on the machine unless `LLM_PROVIDER` names a hosted provider. iac-pr-reviewer keeps the default, because a CI job with an API key is its expected setup.
+- **Shared conventions, not just shared code.** The severity scale, the `LLM_*` settings and the LLM block in JSON reports are defined here, so both tools configure and report the same way.
+- **Released as tarballs, not to npm.** Tagging a version builds the package in CI and attaches it to a GitHub Release. Projects install that tarball: no build step at install time, and the lockfile pins its sha512.
 
 ## Usage
 
