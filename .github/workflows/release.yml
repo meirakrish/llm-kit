@@ -1,18 +1,20 @@
 name: Release
 
 # Push a tag like v0.1.0 to publish the package to npm and attach the tarball to
-# a GitHub Release. Each version gets a provenance attestation (id-token: write).
+# a GitHub Release.
 #
 # npm publishes with the NPM_TOKEN secret for now: npm's trusted publishing
 # rejects GitHub's immutable OIDC subjects, which this repo (created after
-# 2026-07-15) gets (npm/cli#9969). Once that's fixed, drop NODE_AUTH_TOKEN.
+# 2026-07-15) gets (npm/cli#9969). The job has no id-token permission because
+# npm prefers OIDC whenever it can get a token, and ignores NODE_AUTH_TOKEN.
+# Once npm/cli#9969 is fixed, restore `id-token: write` (trusted publishing and
+# provenance) and drop NODE_AUTH_TOKEN.
 on:
   push:
     tags: ["v*"]
 
 permissions:
   contents: write
-  id-token: write
 
 jobs:
   release:
