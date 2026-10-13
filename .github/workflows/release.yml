@@ -1,9 +1,11 @@
 name: Release
 
 # Push a tag like v0.1.0 to publish the package to npm and attach the tarball to
-# a GitHub Release. npm authenticates this workflow through trusted publishing
-# (GitHub OIDC), so there is no npm token in the repo, and each version gets a
-# provenance attestation.
+# a GitHub Release. Each version gets a provenance attestation (id-token: write).
+#
+# npm publishes with the NPM_TOKEN secret for now: npm's trusted publishing
+# rejects GitHub's immutable OIDC subjects, which this repo (created after
+# 2026-07-15) gets (npm/cli#9969). Once that's fixed, drop NODE_AUTH_TOKEN.
 on:
   push:
     tags: ["v*"]
@@ -18,7 +20,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
-      # Node 24 because trusted publishing needs npm 11.5.1+, which Node 22 doesn't bundle.
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -31,6 +32,8 @@ jobs:
       - run: pnpm test
       - run: pnpm pack
       - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish meirakrish-llm-kit-*.tgz --access public
       - name: Create the release
         env:
