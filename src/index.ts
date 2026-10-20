@@ -17,6 +17,17 @@ export {
   type LlmConfigInput,
 } from "./config.js";
 export {
+  createEmbedder,
+  DEFAULT_EMBED_MODELS,
+  EMBED_ENV,
+  EmbedProvider,
+  resolveEmbedConfig,
+  type EmbedConfig,
+  type EmbedConfigInput,
+  type Embedder,
+  type EmbedderOptions,
+} from "./embed.js";
+export {
   ContextOverflowError,
   describeLlmError,
   errorMessage,

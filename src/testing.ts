@@ -1,6 +1,7 @@
 import { AIMessage, type BaseMessage } from "@langchain/core/messages";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import type { LlmClient, StructuredOptions } from "./client.js";
+import type { Embedder } from "./embed.js";
 import { emptyUsage } from "./usage.js";
 
 export interface ScriptedLlmScript {
@@ -59,4 +60,51 @@ export function scriptedLlm(script: ScriptedLlmScript = {}): ScriptedLlm {
       return u;
     },
   };
+}
+
+/** A deterministic Embedder that records what it was asked. For unit tests. */
+export interface FakeEmbedder extends Embedder {
+  readonly dimensions: number;
+  /** The texts of each embed() call. */
+  readonly calls: string[][];
+}
+
+/**
+ * The same text always gets the same unit vector; different texts almost always get different ones.
+ * Vectors carry no meaning, so this suits storage and plumbing tests, not retrieval quality.
+ * `fail` makes the call that contains a matching text throw instead.
+ */
+export function fakeEmbedder(
+  opts: { dimensions?: number; fail?: (text: string) => Error | undefined } = {},
+): FakeEmbedder {
+  const dimensions = opts.dimensions ?? 8;
+  const calls: string[][] = [];
+  return {
+    provider: "custom",
+    model: "fake-embedder",
+    dimensions,
+    calls,
+    async embed(texts) {
+      calls.push(texts);
+      for (const text of texts) {
+        const err = opts.fail?.(text);
+        if (err) throw err;
+      }
+      return texts.map((text) => hashVector(text, dimensions));
+    },
+  };
+}
+
+function hashVector(text: string, dimensions: number): number[] {
+  // FNV-1a seed, then xorshift: cheap, deterministic, spread over [-1, 1).
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  const v = Array.from({ length: dimensions }, () => {
+    h ^= h << 13;
+    h ^= h >>> 17;
+    h ^= h << 5;
+    return (h >>> 0) / 0x80000000 - 1;
+  });
+  const norm = Math.hypot(...v) || 1;
+  return v.map((x) => x / norm);
 }

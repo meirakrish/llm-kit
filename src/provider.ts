@@ -48,7 +48,8 @@ export async function createChatModel(cfg: LlmConfig, opts: ChatModelOptions = {
   }
 }
 
-async function importOptional<T>(pkg: string): Promise<T> {
+/** Internal: import an optional peer dependency with an install hint. */
+export async function importOptional<T>(pkg: string): Promise<T> {
   try {
     return (await import(pkg)) as T;
   } catch (err) {

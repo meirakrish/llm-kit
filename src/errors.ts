@@ -26,9 +26,15 @@ export function isTransportError(err: unknown): boolean {
   return isAbortError(err) || isConnectionError(err) || Boolean((err as { cause?: { code?: string } })?.cause?.code);
 }
 
-/** Ollama rejected the prompt because it is longer than the context window (needs `truncate: false`). */
+/**
+ * Ollama rejected the input because it is longer than the context window (needs `truncate: false`).
+ * Chat and embed requests word this differently.
+ */
 export function isContextOverflow(err: unknown): err is Error {
-  return err instanceof Error && /exceeds the available context size/i.test(err.message);
+  return (
+    err instanceof Error &&
+    /exceeds the available context size|input length exceeds the context length/i.test(err.message)
+  );
 }
 
 /** Thrown when a prompt does not fit the model's context window. */

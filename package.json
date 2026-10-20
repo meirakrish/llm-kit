@@ -1,7 +1,7 @@
 {
   "name": "@meirakrish/llm-kit",
-  "version": "0.1.1",
-  "description": "Hardened LLM layer shared by k8s-devops-agent and iac-pr-reviewer: providers, structured output, usage metering, Ollama safeguards",
+  "version": "0.2.0",
+  "description": "Hardened LLM layer shared by k8s-devops-agent and iac-pr-reviewer: providers, structured output, embeddings, usage metering, Ollama safeguards",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -18,7 +18,8 @@
     "ollama",
     "anthropic",
     "openai",
-    "devops"
+    "devops",
+    "embeddings"
   ],
   "engines": {
     "node": ">=22.19"
