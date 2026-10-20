@@ -35,6 +35,7 @@ flowchart TB
 | Transient local GPU failures (e.g. CUDA errors under WSL)          | Retries Ollama calls once; never retries what will fail the same way again (overflow, timeout, server down)                                                                                                   |
 | Knowing what a run cost                                            | Meters token usage per call, including calls inside structured output, with a peak-prompt figure to compare against the context window                                                                        |
 | Embeddings                                                         | An `Embedder` for Ollama and OpenAI with its own settings (Anthropic has no embedding API): batching, a fixed vector size, `truncate: false` on Ollama, and a check that every vector has the expected length |
+| Streaming answers to a UI                                          | `stream()` yields text as it arrives, with an idle timeout instead of a total one, a retry only before the first piece, and cancellation when the caller stops reading                                        |
 | Testing code that calls an LLM                                     | A small `LlmClient` interface and a scripted fake in `@meirakrish/llm-kit/testing`                                                                                                                            |
 
 It also defines the conventions both tools share: one severity scale (`low` < `medium` < `high` < `critical`), `--fail-on` thresholds, and the LLM metadata block in JSON reports.
@@ -83,6 +84,16 @@ console.log(review.riskLevel, llm.takeUsage()); // { calls: 1, promptTokens: 532
 
 For an agent loop, `llm.chatWithTools(messages, tools)` runs one turn in which the model may call tools.
 
+### Streaming
+
+```ts
+for await (const text of llm.stream(messages, { signal, idleTimeoutMs: 30_000 })) {
+  res.write(text); // pieces of the answer as they are generated
+}
+```
+
+The first piece may take as long as `LLM_TIMEOUT_MS` (it can include loading the model); after that the stream fails with a `TimeoutError` if no text arrives for `idleTimeoutMs`. A failure before any text is retried once on Ollama; once text has been yielded, an error ends the stream instead, because the caller has already used that text. Leaving the loop early (`break`) or aborting `signal` cancels the request. Usage is metered as for other calls.
+
 ### Embeddings
 
 ```ts
@@ -106,7 +117,7 @@ await reviewPlan(plan, { llm });
 expect(llm.calls[0]?.name).toBe("iac_review");
 ```
 
-`fakeEmbedder({ dimensions })` returns deterministic unit vectors (the same text always gets the same vector) and records each call.
+`scriptedLlm({ stream: [["The answer", " is 42."]] })` plays back streamed answers the same way. `fakeEmbedder({ dimensions })` returns deterministic unit vectors (the same text always gets the same vector) and records each call.
 
 ## Configuration
 

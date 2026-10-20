@@ -1,6 +1,6 @@
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { AIMessage, type BaseMessage } from "@langchain/core/messages";
-import type { ChatResult } from "@langchain/core/outputs";
+import { AIMessage, AIMessageChunk, type BaseMessage } from "@langchain/core/messages";
+import { ChatGenerationChunk, type ChatResult } from "@langchain/core/outputs";
 import { RunnableLambda } from "@langchain/core/runnables";
 
 type Reply = string | Error;
@@ -59,4 +59,59 @@ export function fakeConfig(overrides = {}) {
 
 export function respond(status: number, body: unknown): typeof fetch {
   return (async () => new Response(JSON.stringify(body), { status })) as typeof fetch;
+}
+
+type StreamStep = string | Error | { delayMs: number };
+
+/**
+ * A chat model that streams scripted pieces. Each call plays the next script: strings are yielded as
+ * chunks, `{ delayMs }` waits (aborting if the call's signal fires), an Error is thrown. The last chunk
+ * carries usage, as Ollama's does.
+ */
+export class FakeStreamingModel extends BaseChatModel {
+  model = "fake-stream";
+  calls = 0;
+  aborted = 0;
+
+  constructor(private scripts: StreamStep[][]) {
+    super({});
+  }
+
+  _llmType() {
+    return "fake-stream";
+  }
+
+  async _generate(): Promise<ChatResult> {
+    throw new Error("FakeStreamingModel only streams");
+  }
+
+  override async *_streamResponseChunks(
+    _messages: BaseMessage[],
+    options: this["ParsedCallOptions"],
+  ): AsyncGenerator<ChatGenerationChunk> {
+    const steps = this.scripts[this.calls++] ?? [];
+    const signal = options.signal;
+    for (const step of steps) {
+      if (step instanceof Error) throw step;
+      if (typeof step === "object") {
+        await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, step.delayMs);
+          signal?.addEventListener("abort", () => {
+            clearTimeout(timer);
+            this.aborted++;
+            reject(Object.assign(new Error("Aborted"), { name: "AbortError" }));
+          });
+        });
+        continue;
+      }
+      yield new ChatGenerationChunk({ text: step, message: new AIMessageChunk({ content: step }) });
+    }
+    yield new ChatGenerationChunk({
+      text: "",
+      message: new AIMessageChunk({
+        content: "",
+        usage_metadata: { input_tokens: 50, output_tokens: steps.length, total_tokens: 50 + steps.length },
+      }),
+    });
+  }
 }

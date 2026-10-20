@@ -1,6 +1,6 @@
 import type { CallbackHandlerMethods } from "@langchain/core/callbacks/base";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { type AIMessage, type BaseMessage, isAIMessage } from "@langchain/core/messages";
+import { type AIMessage, type AIMessageChunk, type BaseMessage, isAIMessage } from "@langchain/core/messages";
 import type { ChatGeneration, LLMResult } from "@langchain/core/outputs";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import type { z } from "zod";
@@ -13,6 +13,14 @@ import { type LlmUsage, UsageMeter } from "./usage.js";
 export interface CallOptions {
   /** Cancels the call; combined with the configured per-request timeout. */
   signal?: AbortSignal;
+}
+
+export interface StreamOptions extends CallOptions {
+  /**
+   * Give up when no text arrives for this long once the answer has started. The first piece gets the
+   * configured `timeoutMs` instead, since it may include loading the model. Default 30 s.
+   */
+  idleTimeoutMs?: number;
 }
 
 export interface StructuredOptions extends CallOptions {
@@ -36,6 +44,12 @@ export interface LlmClient {
   chatWithTools(messages: BaseMessage[], tools: StructuredToolInterface[], opts?: CallOptions): Promise<AIMessage>;
   /** One chat turn whose answer is validated against `schema`. Retries once if the answer is unusable. */
   structured<S extends z.ZodType>(schema: S, messages: BaseMessage[], opts: StructuredOptions): Promise<z.infer<S>>;
+  /**
+   * One chat turn, yielding the answer's text as it is generated. A failure before any text is retried
+   * like chatWithTools; once text has been yielded, an error ends the stream (the caller has shown it).
+   * Stopping early (break, return) cancels the request.
+   */
+  stream(messages: BaseMessage[], opts?: StreamOptions): AsyncIterable<string>;
   /** Token usage of the calls made since the last `takeUsage()`; resets the count. */
   takeUsage(): LlmUsage;
 }
@@ -125,6 +139,53 @@ export async function createLlmClient(cfg: LlmConfig, opts: LlmClientOptions = {
       );
     },
 
+    stream(messages, o) {
+      const idleMs = o?.idleTimeoutMs ?? 30_000;
+      return (async function* () {
+        for (let attempt = 1; ; attempt++) {
+          const controller = new AbortController();
+          const timeout = (ms: number) =>
+            setTimeout(() => controller.abort(new DOMException(`no output for ${ms} ms`, "TimeoutError")), ms);
+          let timer = timeout(cfg.timeoutMs);
+          let started = false;
+          const signal = o?.signal ? AbortSignal.any([o.signal, controller.signal]) : controller.signal;
+          // Iterated by hand: on an early stop, `for await` would wait for the model's stream to wind down
+          // before our `finally` could abort it.
+          let chunks: AsyncIterator<AIMessageChunk> | undefined;
+          try {
+            chunks = (await model.stream(messages, { callbacks, signal }))[Symbol.asyncIterator]();
+            for (;;) {
+              const next = await chunks.next();
+              if (next.done) return;
+              clearTimeout(timer);
+              timer = timeout(idleMs);
+              const text = chunkText(next.value);
+              if (text) {
+                started = true;
+                yield text;
+              }
+            }
+          } catch (err) {
+            // Report our own timeout as such, not as the generic abort the SDK turns it into.
+            const reason = controller.signal.aborted ? controller.signal.reason : err;
+            if (started || attempt >= 2 || !isOllama || isFatal(reason)) explainOverflow(reason, opts.overflowHint);
+            opts.log?.(`LLM stream failed, retrying once: ${errorMessage(reason).split("\n")[0]?.slice(0, 120)}`);
+          } finally {
+            clearTimeout(timer);
+            // Cancels the request when the caller stops early; a no-op once the stream has finished.
+            controller.abort();
+            chunks?.return?.().catch(() => {});
+          }
+        }
+      })();
+    },
+
     takeUsage: () => meter.take(),
   };
+}
+
+/** The text of a streamed chunk; providers may send content as a string or as typed parts. */
+function chunkText(chunk: AIMessageChunk): string {
+  if (typeof chunk.content === "string") return chunk.content;
+  return chunk.content.map((part) => (part.type === "text" && "text" in part ? String(part.text) : "")).join("");
 }
