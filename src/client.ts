@@ -57,8 +57,9 @@ function isFatal(err: unknown): boolean {
 /**
  * Run `call`, retrying once when `shouldRetry` allows it. Fatal errors (overflow, timeout, server unreachable)
  * never retry. Overflow errors are rewritten into a ContextOverflowError with an actionable message.
+ * Internal: shared with the embedder, not exported from the package.
  */
-async function withOneRetry<T>(
+export async function withOneRetry<T>(
   call: () => Promise<T>,
   shouldRetry: boolean,
   what: string,

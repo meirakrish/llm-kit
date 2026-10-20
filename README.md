@@ -25,16 +25,17 @@ flowchart TB
 
 ## What it handles
 
-| Problem                                                            | What llm-kit does                                                                                                                                    |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Switching between local and hosted models                          | One config for Ollama, Anthropic and OpenAI. A present API key picks its provider; otherwise local Ollama. Hosted SDKs load only when used.          |
-| Ollama silently drops the start of prompts longer than its context | Sends `truncate: false`, so an oversized prompt fails with a clear `ContextOverflowError` ("prompt (20000 tokens) does not fit…; raise LLM_NUM_CTX") |
-| Small models write one string forever                              | Length limits on structured-output fields, enforced by Ollama's constrained decoding, plus an output token cap                                       |
-| Thinking models spend the output budget reasoning                  | Turns thinking off, only for models that support it (others reject the option)                                                                       |
-| Invalid or truncated JSON answers                                  | Validates every structured answer against its zod schema and retries once                                                                            |
-| Transient local GPU failures (e.g. CUDA errors under WSL)          | Retries Ollama calls once; never retries what will fail the same way again (overflow, timeout, server down)                                          |
-| Knowing what a run cost                                            | Meters token usage per call, including calls inside structured output, with a peak-prompt figure to compare against the context window               |
-| Testing code that calls an LLM                                     | A small `LlmClient` interface and a scripted fake in `@meirakrish/llm-kit/testing`                                                                   |
+| Problem                                                            | What llm-kit does                                                                                                                                                                                             |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Switching between local and hosted models                          | One config for Ollama, Anthropic and OpenAI. A present API key picks its provider; otherwise local Ollama. Hosted SDKs load only when used.                                                                   |
+| Ollama silently drops the start of prompts longer than its context | Sends `truncate: false`, so an oversized prompt fails with a clear `ContextOverflowError` ("prompt (20000 tokens) does not fit…; raise LLM_NUM_CTX")                                                          |
+| Small models write one string forever                              | Length limits on structured-output fields, enforced by Ollama's constrained decoding, plus an output token cap                                                                                                |
+| Thinking models spend the output budget reasoning                  | Turns thinking off, only for models that support it (others reject the option)                                                                                                                                |
+| Invalid or truncated JSON answers                                  | Validates every structured answer against its zod schema and retries once                                                                                                                                     |
+| Transient local GPU failures (e.g. CUDA errors under WSL)          | Retries Ollama calls once; never retries what will fail the same way again (overflow, timeout, server down)                                                                                                   |
+| Knowing what a run cost                                            | Meters token usage per call, including calls inside structured output, with a peak-prompt figure to compare against the context window                                                                        |
+| Embeddings                                                         | An `Embedder` for Ollama and OpenAI with its own settings (Anthropic has no embedding API): batching, a fixed vector size, `truncate: false` on Ollama, and a check that every vector has the expected length |
+| Testing code that calls an LLM                                     | A small `LlmClient` interface and a scripted fake in `@meirakrish/llm-kit/testing`                                                                                                                            |
 
 It also defines the conventions both tools share: one severity scale (`low` < `medium` < `high` < `critical`), `--fail-on` thresholds, and the LLM metadata block in JSON reports.
 
@@ -82,6 +83,19 @@ console.log(review.riskLevel, llm.takeUsage()); // { calls: 1, promptTokens: 532
 
 For an agent loop, `llm.chatWithTools(messages, tools)` runs one turn in which the model may call tools.
 
+### Embeddings
+
+```ts
+import { createEmbedder, resolveEmbedConfig } from "@meirakrish/llm-kit";
+
+const embedder = await createEmbedder(resolveEmbedConfig({ dimensions: 1024 }), {
+  overflowHint: "lower the chunk size",
+});
+const vectors = await embedder.embed(chunks.map((c) => c.text)); // number[][], one per chunk, in order
+```
+
+Embeddings have their own provider setting, because the chat provider may be Anthropic, which has no embedding API. Setting `dimensions` asks the model for vectors of that length (qwen3-embedding and text-embedding-3 support it) and rejects any other length, so a vector column and its index keep working when the provider changes. On Ollama, an over-long text throws a `ContextOverflowError` instead of being embedded in part.
+
 ### Testing
 
 ```ts
@@ -91,6 +105,8 @@ const llm = scriptedLlm({ structured: [{ riskLevel: "high", summary: "…", find
 await reviewPlan(plan, { llm });
 expect(llm.calls[0]?.name).toBe("iac_review");
 ```
+
+`fakeEmbedder({ dimensions })` returns deterministic unit vectors (the same text always gets the same vector) and records each call.
 
 ## Configuration
 
@@ -106,6 +122,17 @@ Flags passed to `resolveLlmConfig` win over environment variables, which win ove
 | `LLM_TIMEOUT_MS`        | `180000`                 | Per request                                                   |
 | `ANTHROPIC_API_KEY`     |                          | Selects Anthropic when no provider is set                     |
 | `OPENAI_API_KEY`        |                          | Selects OpenAI when no provider is set (and no Anthropic key) |
+
+Embeddings:
+
+| Variable           | Default                  | Notes                                                              |
+| ------------------ | ------------------------ | ------------------------------------------------------------------ |
+| `EMBED_PROVIDER`   | detected                 | `ollama` or `openai`; `OPENAI_API_KEY` selects OpenAI when not set |
+| `EMBED_MODEL`      | per provider             | `qwen3-embedding:0.6b`, `text-embedding-3-small`                   |
+| `EMBED_DIMENSIONS` | model's native size      | Requested from the model and enforced                              |
+| `EMBED_BATCH_SIZE` | `32`                     | Texts per request                                                  |
+| `EMBED_TIMEOUT_MS` | `120000`                 | Per request                                                        |
+| `OLLAMA_HOST`      | `http://localhost:11434` | Shared with chat                                                   |
 
 Tool-specific settings belong to each tool, with its own prefix.
 
