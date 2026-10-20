@@ -12,10 +12,12 @@ export interface ScriptedLlmScript {
    * Answers are validated against the schema, like the real client does.
    */
   structured?: Array<unknown> | ((name: string, messages: BaseMessage[]) => unknown);
+  /** Answers to stream(), in order: the pieces to yield. An Error is thrown before any text. */
+  stream?: Array<string[] | Error>;
 }
 
 export interface RecordedCall {
-  kind: "chat" | "structured";
+  kind: "chat" | "structured" | "stream";
   messages: BaseMessage[];
   tools?: string[];
   name?: string;
@@ -29,6 +31,7 @@ export interface ScriptedLlm extends LlmClient {
 export function scriptedLlm(script: ScriptedLlmScript = {}): ScriptedLlm {
   const chat = [...(script.chat ?? [])];
   const answers = Array.isArray(script.structured) ? [...script.structured] : null;
+  const streams = [...(script.stream ?? [])];
   const calls: RecordedCall[] = [];
   let usage = emptyUsage();
   const count = () => {
@@ -53,6 +56,16 @@ export function scriptedLlm(script: ScriptedLlmScript = {}): ScriptedLlm {
       if (next instanceof Error) throw next;
       if (next === undefined) throw new Error(`scriptedLlm: no structured answer left for "${opts.name}"`);
       return schema.parse(next);
+    },
+    stream(messages: BaseMessage[]) {
+      calls.push({ kind: "stream", messages });
+      count();
+      const next = streams.shift();
+      return (async function* () {
+        if (next instanceof Error) throw next;
+        if (next === undefined) throw new Error("scriptedLlm: no stream answer left");
+        yield* next;
+      })();
     },
     takeUsage() {
       const u = usage;

@@ -3,6 +3,7 @@ export {
   type CallOptions,
   type LlmClient,
   type LlmClientOptions,
+  type StreamOptions,
   type StructuredOptions,
 } from "./client.js";
 export {
